@@ -1,3 +1,5 @@
+import { existsSync } from "fs";
+import path = require("path");
 import * as vscode from "vscode";
 import {
   getMesonTargets,
@@ -13,7 +15,7 @@ interface MesonTaskDefinition extends vscode.TaskDefinition {
   filename?: string;
 }
 
-export async function getMesonTasks(buildDir: string): Promise<vscode.Task[]> {
+export async function getMesonTasksForDir(buildDir: string, workspace: vscode.WorkspaceFolder): Promise<vscode.Task[]> {
   try {
     const [targets, tests, benchmarks] = await Promise.all([
       getMesonTargets(buildDir),
@@ -22,32 +24,37 @@ export async function getMesonTasks(buildDir: string): Promise<vscode.Task[]> {
     ]);
     const defaultBuildTask = new vscode.Task(
       { type: "meson", mode: "build" },
+      workspace,
       "Build all targets",
       "Meson",
       new vscode.ProcessExecution(extensionConfiguration("mesonPath"), ["compile"], { cwd: buildDir })
     );
     const defaultTestTask = new vscode.Task(
       { type: "meson", mode: "test" },
+      workspace,
       "Run tests",
       "Meson",
       new vscode.ProcessExecution(extensionConfiguration("mesonPath"), ["test"], { cwd: buildDir })
     );
     const defaultBenchmarkTask = new vscode.Task(
       { type: "meson", mode: "benchmark" },
+      workspace,
       "Run benchmarks",
       "Meson",
       new vscode.ProcessExecution(extensionConfiguration("mesonPath"), ["test", "--benchmark", "--verbose"], { cwd: buildDir })
     );
     const defaultReconfigureTask = new vscode.Task(
       { type: "meson", mode: "reconfigure" },
+      workspace,
       "Reconfigure",
       "Meson",
       // Note "setup --reconfigure" needs to be run from the root.
       new vscode.ProcessExecution(extensionConfiguration("mesonPath"), ["setup", "--reconfigure", buildDir],
-        { cwd: vscode.workspace.rootPath })
+        { cwd: workspace.uri.fsPath })
     );
     const defaultCleanTask = new vscode.Task(
       { type: "meson", mode: "clean" },
+      workspace,
       "Clean",
       "Meson",
       new vscode.ProcessExecution(extensionConfiguration("mesonPath"), ["compile", "--clean"], { cwd: buildDir })
@@ -75,6 +82,7 @@ export async function getMesonTasks(buildDir: string): Promise<vscode.Task[]> {
           };
           const buildTask = new vscode.Task(
             def,
+            workspace,
             `Build ${targetName}`,
             "Meson",
             new vscode.ProcessExecution(extensionConfiguration("mesonPath"), ["compile", targetName], {
@@ -86,6 +94,7 @@ export async function getMesonTasks(buildDir: string): Promise<vscode.Task[]> {
             if (t.filename.length == 1) {
               const runTask = new vscode.Task(
                 { type: "meson", target: targetName, mode: "run" },
+                workspace,
                 `Run ${targetName}`,
                 "Meson",
                 new vscode.ProcessExecution(t.filename[0])
@@ -101,10 +110,11 @@ export async function getMesonTasks(buildDir: string): Promise<vscode.Task[]> {
                     filename: f,
                     mode: "run"
                   },
+                  workspace,
                   `Run ${targetName}: ${f}`,
                   "Meson",
                   new vscode.ProcessExecution(f, {
-                    cwd: vscode.workspace.rootPath
+                    cwd: workspace.uri.fsPath
                   })
                 );
                 runTask.group = vscode.TaskGroup.Test;
@@ -119,6 +129,7 @@ export async function getMesonTasks(buildDir: string): Promise<vscode.Task[]> {
       ...tests.map(t => {
         const testTask = new vscode.Task(
           { type: "meson", mode: "test", target: t.name },
+          workspace,
           `Test ${t.name}`,
           "Meson",
           new vscode.ProcessExecution(extensionConfiguration("mesonPath"), ["test", t.name], {
@@ -132,6 +143,7 @@ export async function getMesonTasks(buildDir: string): Promise<vscode.Task[]> {
       ...benchmarks.map(b => {
         const benchmarkTask = new vscode.Task(
           { type: "meson", mode: "benchmark", target: b.name },
+          workspace,
           `Benchmark ${b.name}`,
           "Meson",
           new vscode.ProcessExecution(extensionConfiguration("mesonPath"), ["test", "--benchmark", "--verbose", b.name], {
@@ -153,6 +165,19 @@ export async function getMesonTasks(buildDir: string): Promise<vscode.Task[]> {
 
     return [];
   }
+}
+
+export async function getMesonTasks(): Promise<vscode.Task[]> {
+  let tasks = []
+  const buildDir = extensionConfiguration("buildFolder");
+  for (const wsFolder of vscode.workspace.workspaceFolders) {
+    const wsBuildDir = path.resolve(wsFolder.uri.fsPath, buildDir)
+    if (existsSync(wsBuildDir)) {
+      tasks.push(await getMesonTasksForDir(wsBuildDir, wsFolder))
+    }
+  }
+  //return path.resolve(vscode.workspace.rootPath, filepath);
+  return [].concat(...tasks);
 }
 
 export async function getTask(mode: string, name?: string) {

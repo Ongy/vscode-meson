@@ -88,9 +88,7 @@ export async function activate(ctx: vscode.ExtensionContext) {
   ctx.subscriptions.push(
     vscode.tasks.registerTaskProvider("meson", {
       provideTasks(token) {
-        return getMesonTasks(
-          workspaceRelative(extensionConfiguration("buildFolder"))
-        );
+        return getMesonTasks();
       },
       resolveTask() {
         return undefined;

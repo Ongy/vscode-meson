@@ -1,3 +1,4 @@
+import path = require("path");
 import * as vscode from "vscode";
 
 import {
@@ -5,18 +6,16 @@ import {
 } from "./meson/introspection"
 import {
     extensionConfiguration,
+    getMesonTargetsFromFolder,
     getTargetName
 } from "./utils"
 
 export class DebugConfigurationProvider implements vscode.DebugConfigurationProvider {
-    private path: string;
-
-    constructor(path: string) {
-        this.path = path
-    }
+    constructor() { }
 
     async provideDebugConfigurations(folder: vscode.WorkspaceFolder | undefined, token?: vscode.CancellationToken): Promise<vscode.DebugConfiguration[]> {
-        let targets = await getMesonTargets(this.path);
+        /* TODO: Figure out if this should iterate over all, or we are called with every folder */
+        let targets = await getMesonTargetsFromFolder(folder ?? vscode.workspace.workspaceFolders[0]);
 
         let configDebugOptions = extensionConfiguration("debugOptions");
 
@@ -33,7 +32,7 @@ export class DebugConfigurationProvider implements vscode.DebugConfigurationProv
                 type: 'cppdbg',
                 name: target.name,
                 request: "launch",
-                cwd: this.path,
+                cwd: path.resolve(target.workspace.uri.fsPath, extensionConfiguration("buildFolder")),
                 program: target.filename[0],
                 preLaunchTask: `Meson: Build ${targetName}`
             };

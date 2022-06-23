@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 
 import { BaseNode } from "../basenode";
 import { ProjectInfo, Subproject } from "../../meson/types";
-import { extensionRelative } from "../../utils";
+import { extensionRelative, getMesonTargetsFromFolder } from "../../utils";
 import { TargetDirectoryNode, TargetNode } from "./targets";
 import { getMesonBenchmarks, getMesonTargets, getMesonTests } from "../../meson/introspection";
 import { TestRootNode } from "./tests";
@@ -32,7 +32,7 @@ export class ProjectNode extends BaseNode {
     let children: BaseNode[] = [
       new TargetDirectoryNode(`${this.id}-targets`,
         ".",
-        (await getMesonTargets(this.buildDir)).filter((target) => !target.subproject)
+        (await getMesonTargetsFromFolder(vscode.workspace.workspaceFolders[0])).filter((target) => !target.subproject)
       )
     ];
 

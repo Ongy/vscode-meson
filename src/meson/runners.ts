@@ -10,6 +10,11 @@ import { getTask } from "../tasks";
 import { relative } from "path";
 import { checkMesonIsConfigured } from "./utils";
 
+/** Run meson configure to ensure we have a builddir generated from the source
+ *
+ * @param source The root directory of the project
+ * @param build The build directory name inside the source root
+ */
 export async function runMesonConfigure(source: string, build: string) {
   return vscode.window.withProgress(
     {
@@ -75,6 +80,11 @@ export async function runMesonReconfigure() {
   }
 }
 
+/** Run the build command and have meson take care of scheduling
+ * 
+ * @param buildDir The build directory to run meson in
+ * @param name The target to build. Or null to build every possible target
+ */
 export async function runMesonBuild(buildDir: string, name?: string) {
 
   try {

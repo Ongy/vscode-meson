@@ -1,4 +1,5 @@
 type Dict<T> = { [x: string]: T };
+import * as vscode from "vscode";
 
 export type LanguageID = string;
 export type TargetType =
@@ -43,6 +44,7 @@ export interface Target {
   target_sources?: TargetSource[];
   installed: boolean;
   install_filename?: string;
+  workspace: vscode.WorkspaceFolder;
 }
 
 export interface Subproject {

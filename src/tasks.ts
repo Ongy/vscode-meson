@@ -6,7 +6,7 @@ import {
   getMesonTests,
   getMesonBenchmarks
 } from "./meson/introspection";
-import { extensionConfiguration, getOutputChannel, getTargetName } from "./utils";
+import { extensionConfiguration, getMesonTargetsFromFolder, getOutputChannel, getTargetName } from "./utils";
 
 interface MesonTaskDefinition extends vscode.TaskDefinition {
   type: "meson";
@@ -18,7 +18,7 @@ interface MesonTaskDefinition extends vscode.TaskDefinition {
 export async function getMesonTasksForDir(buildDir: string, workspace: vscode.WorkspaceFolder): Promise<vscode.Task[]> {
   try {
     const [targets, tests, benchmarks] = await Promise.all([
-      getMesonTargets(buildDir),
+      getMesonTargetsFromFolder(workspace),
       getMesonTests(buildDir),
       getMesonBenchmarks(buildDir)
     ]);

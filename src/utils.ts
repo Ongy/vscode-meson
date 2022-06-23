@@ -5,7 +5,7 @@ import * as vscode from "vscode";
 import { createHash, BinaryLike } from "crypto";
 import { Target } from "./meson/types";
 import { ExtensionConfiguration } from "./types";
-import { getMesonBuildOptions } from "./meson/introspection";
+import { getMesonBuildOptions, getMesonTargets } from "./meson/introspection";
 import { extensionPath } from "./extension";
 
 export async function exec(
@@ -106,13 +106,22 @@ export function workspaceRelative(filepath: string) {
   return path.resolve(vscode.workspace.rootPath, filepath);
 }
 
+/** Gets the target name as used by meson calls to pick the target
+ * 
+ * This differs from `target.name`. The return value from this function
+ * can be passed to meson. It contians an internal path from the build
+ * system as well.
+ * 
+ * @param target The target to get the name off
+ * @returns The target name that can be passed to meson calls
+ */
 export async function getTargetName(target: Target) {
-  const buildDir = workspaceRelative(extensionConfiguration("buildFolder"));
+  const buildDir = path.resolve(target.workspace.uri.fsPath, extensionConfiguration("buildFolder"));
   const buildOptions = await getMesonBuildOptions(buildDir);
   const layoutOption = buildOptions.filter(o => o.name === "layout")[0];
 
   if (layoutOption.value === "mirror") {
-    const relativePath = path.relative(vscode.workspace.rootPath, path.dirname(target.defined_in));
+    const relativePath = path.relative(target.workspace.uri.fsPath, path.dirname(target.defined_in));
 
     // Meson requires the separator between path and target name to be '/'.
     return path.posix.join(relativePath, target.name);
@@ -154,4 +163,20 @@ export function arrayIncludes<T>(array: T[], value: T) {
 
 export function isThenable<T>(x: vscode.ProviderResult<T>): x is Thenable<T> {
   return arrayIncludes(Object.getOwnPropertyNames(x), "then");
+}
+
+/** Does the same as `getMesonTargets` but makes sure the workspace attribute is set
+ * 
+ * @param folder The workspace folder to get the targets for
+ * @returns A list of targets defined in the workspace
+ */
+export async function getMesonTargetsFromFolder(folder: vscode.WorkspaceFolder) {
+    const buildDir = path.resolve(folder.uri.fsPath, extensionConfiguration("buildFolder"))
+
+    let ret = await getMesonTargets(buildDir);
+    for (let target of ret) {
+      target.workspace = folder;
+    }
+
+    return ret;
 }

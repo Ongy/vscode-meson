@@ -13,12 +13,14 @@ import {
   execAsTask,
   workspaceRelative,
   extensionConfigurationSet,
-  getTargetName
+  getTargetName,
+  getMesonTargetsFromFolder
 } from "./utils";
 import {
   getMesonTargets,
   getMesonTests,
-  getMesonBenchmarks
+  getMesonBenchmarks,
+  getMesonProjectInfo
 } from "./meson/introspection";
 import {DebugConfigurationProvider} from "./configprovider";
 import {
@@ -59,7 +61,7 @@ export async function activate(ctx: vscode.ExtensionContext) {
 
   ctx.subscriptions.push(
     vscode.debug.registerDebugConfigurationProvider('cppdbg',
-      new DebugConfigurationProvider(workspaceRelative(extensionConfiguration("buildFolder"))),
+      new DebugConfigurationProvider(),
       vscode.DebugConfigurationProviderTriggerKind.Dynamic)
   );
 
@@ -118,9 +120,10 @@ export async function activate(ctx: vscode.ExtensionContext) {
       "mesonbuild.build",
       async (name?: string) => {
         try {
-          name ??= await pickBuildTarget();
-          runMesonBuild(buildDir, name);
+          const target = await pickBuildTarget();
+          runMesonBuild(path.resolve(target.folder.uri.fsPath, extensionConfiguration("buildFolder")), target.name);
         } catch (err) {
+          /* TODO: Figure out which exceptions are errors and display them */
           // Pick cancelled.
         }
 
@@ -189,13 +192,61 @@ export async function activate(ctx: vscode.ExtensionContext) {
     explorer.refresh();
   }
 
+  async function pickCommandFolder() {
+    const picker = vscode.window.createQuickPick();
+    picker.busy = true;
+    picker.placeholder = "Select folder to run command in.";
+    picker.show();
+    let items: vscode.QuickPickItem[] = []
+
+    for (const folder of vscode.workspace.workspaceFolders) {
+      const wsBuildDir = path.resolve(folder.uri.fsPath, extensionConfiguration("buildFolder"))
+      try {
+        /* Slighly dumb here, but let's just call something to check if this workspace has a meson project configures */
+        await getMesonProjectInfo(wsBuildDir);
+        items.push({
+          label: folder.name,
+          detail: `Pick ${folder.name}`,
+          description: folder.uri.fsPath,
+          picked: false
+        })
+      } catch{}
+    }
+
+    picker.busy = false;
+    picker.items = items;
+
+    if (items.length == 1) {
+      picker.dispose();
+      return new Promise<vscode.WorkspaceFolder>((resolve, reject) => {
+        const folder = vscode.workspace.workspaceFolders.find((folder) => folder.name === items[0].label);
+        resolve(folder);
+      });
+    }
+
+    return new Promise<vscode.WorkspaceFolder>((resolve, reject) => {
+      picker.onDidAccept(() => {
+        const selection = picker.activeItems[0];
+
+        const folder = vscode.workspace.workspaceFolders.find((folder) => folder.name === selection.label);
+        resolve(folder);
+
+        picker.dispose();
+      });
+
+      picker.onDidHide(() => reject());
+    });
+  }
+
   async function pickBuildTarget() {
+    const folder = await pickCommandFolder();
+
     const picker = vscode.window.createQuickPick();
     picker.busy = true;
     picker.placeholder = "Select target to build. Defaults to all targets";
     picker.show();
 
-    const targets = await getMesonTargets(buildDir);
+    const targets = await getMesonTargetsFromFolder(folder);
 
     picker.busy = false;
     picker.items = [
@@ -215,15 +266,15 @@ export async function activate(ctx: vscode.ExtensionContext) {
       })
     ];
 
-    return new Promise<string>((resolve, reject) => {
-      picker.onDidAccept(() => {
+    return new Promise<{name: string, folder: vscode.WorkspaceFolder}>((resolve, reject) => {
+      picker.onDidAccept(async () => {
         const selection = picker.activeItems[0];
 
         if (selection.label === "all") {
-          resolve(null);
+          resolve({name: null, folder: folder});
         } else {
           const target = targets.find((target) => target.name === selection.label);
-          resolve(getTargetName(target));
+          resolve({name: await getTargetName(target), folder: target.workspace});
         }
 
         picker.dispose();
